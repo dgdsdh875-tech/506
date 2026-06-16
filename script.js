@@ -1,10 +1,17 @@
 // قاعدة بيانات تتضمن الفئات الآن
 let db = { products: [], customers: [], cart: [], invoices: [], categories: [] };
 
-// استرجاع البيانات من التخزين المحلي (لحمايتها من الحذف)
+// استرجاع البيانات من التخزين المحلي (مع حماية تهيئة البيانات لحل مشكلة عدم الظهور)
 if (localStorage.getItem('pos_db_abu_amir')) {
     try {
-        db = JSON.parse(localStorage.getItem('pos_db_abu_amir'));
+        let savedDb = JSON.parse(localStorage.getItem('pos_db_abu_amir'));
+        if(savedDb) {
+            db.products = savedDb.products || [];
+            db.customers = savedDb.customers || [];
+            db.cart = savedDb.cart || [];
+            db.invoices = savedDb.invoices || [];
+            db.categories = savedDb.categories || [];
+        }
     } catch(e) { console.error("خطأ في قراءة البيانات", e); }
 }
 
@@ -43,10 +50,12 @@ document.getElementById('backupInput').addEventListener('change', function(event
         try {
             let importedDb = JSON.parse(e.target.result);
             if(importedDb && importedDb.products) {
-                db = importedDb;
-                if(!db.invoices) db.invoices = [];
-                if(!db.categories) db.categories = []; // لتوافقية النسخ القديمة
-                saveLocal(); // حفظ مباشر للنسخة المسترجعة
+                db.products = importedDb.products || [];
+                db.customers = importedDb.customers || [];
+                db.cart = importedDb.cart || [];
+                db.invoices = importedDb.invoices || [];
+                db.categories = importedDb.categories || [];
+                saveLocal(); 
                 renderCategories(); renderProducts(); renderCustomers(); updateCartCustomerSelect(); updateCartUI();
                 customAlert('تم استعادة النسخة الاحتياطية بنجاح!');
             }
