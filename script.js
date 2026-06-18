@@ -1,10 +1,56 @@
+// إعداد قاعدة البيانات IndexedDB ذات المساحة المفتوحة
+const IDB_NAME = 'POSAppDB_AbuAmir';
+const IDB_STORE = 'appStorage';
+
+function initIndexedDB() {
+    return new Promise((resolve, reject) => {
+        let request = indexedDB.open(IDB_NAME, 1);
+        request.onupgradeneeded = function(e) {
+            let db = e.target.result;
+            if (!db.objectStoreNames.contains(IDB_STORE)) {
+                db.createObjectStore(IDB_STORE);
+            }
+        };
+        request.onsuccess = function(e) { resolve(e.target.result); };
+        request.onerror = function(e) { reject(e.target.error); };
+    });
+}
+
+async function saveToIndexedDB(key, data) {
+    const idb = await initIndexedDB();
+    return new Promise((resolve, reject) => {
+        let transaction = idb.transaction(IDB_STORE, 'readwrite');
+        let store = transaction.objectStore(IDB_STORE);
+        let request = store.put(JSON.parse(JSON.stringify(data)), key);
+        request.onsuccess = () => resolve();
+        request.onerror = (e) => reject(e.target.error);
+    });
+}
+
+async function getFromIndexedDB(key) {
+    const idb = await initIndexedDB();
+    return new Promise((resolve, reject) => {
+        let transaction = idb.transaction(IDB_STORE, 'readonly');
+        let store = transaction.objectStore(IDB_STORE);
+        let request = store.get(key);
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = (e) => reject(e.target.error);
+    });
+}
+
 // قاعدة بيانات تتضمن الفئات الآن
 let db = { products: [], customers: [], cart: [], invoices: [], categories: [] };
 
-// استرجاع البيانات من التخزين المحلي (مع حماية تهيئة البيانات لحل مشكلة عدم الظهور)
-if (localStorage.getItem('pos_db_abu_amir')) {
+// استرجاع البيانات من التخزين المحلي (التحديث لاستخدام IndexedDB مع دعم نقل القديم)
+async function loadAppDatabase() {
     try {
-        let savedDb = JSON.parse(localStorage.getItem('pos_db_abu_amir'));
+        let savedDb = await getFromIndexedDB('pos_db_abu_amir');
+        
+        // التوافقية الرجعية: استيراد البيانات القديمة من localStorage إن وجدت ولم يتم نقلها بعد
+        if (!savedDb && localStorage.getItem('pos_db_abu_amir')) {
+            savedDb = JSON.parse(localStorage.getItem('pos_db_abu_amir'));
+        }
+
         if(savedDb) {
             db.products = savedDb.products || [];
             db.customers = savedDb.customers || [];
@@ -38,25 +84,22 @@ if (localStorage.getItem('pos_db_abu_amir')) {
             });
         }
     } catch(e) { console.error("خطأ في قراءة البيانات", e); }
+
+    // التشغيل المبدئي للواجهة بعد اكتمال تحميل البيانات
+    renderCategories(); renderProducts(); renderCustomers(); updateCartCustomerSelect(); updateCartUI();
 }
 
-// دالة لحفظ أي تغيير جديد محلياً فوراً
+// دالة لحفظ أي تغيير جديد محلياً فوراً (تم التحديث لـ IndexedDB)
 let saveLocalTimeout = null;
 function saveLocal() {
     if (saveLocalTimeout) {
         clearTimeout(saveLocalTimeout);
     }
     saveLocalTimeout = setTimeout(() => {
-        try {
-            localStorage.setItem('pos_db_abu_amir', JSON.stringify(db));
-        } catch (e) {
-            if (e.name === 'QuotaExceededError') {
-                console.error("Quota Exceeded!");
-                customAlert("مساحة التخزين ممتلئة! يرجى أخذ نسخة احتياطية ومسح المتصفح أو مسح بعض المنتجات القديمة.");
-            } else {
-                console.error("خطأ في الحفظ", e);
-            }
-        }
+        saveToIndexedDB('pos_db_abu_amir', db).catch(e => {
+            console.error("خطأ في الحفظ", e);
+            customAlert("حدث خطأ أثناء الحفظ. يرجى التأكد من مساحة الجهاز.");
+        });
     }, 150); // تأخير بسيط لمنع التكرار المستمر
 }
 
@@ -595,4 +638,4 @@ document.getElementById('promptConfirmBtn').addEventListener('click', function()
 });
 
 // التشغيل المبدئي
-renderCategories(); renderProducts(); renderCustomers(); updateCartCustomerSelect(); updateCartUI();
+loadAppDatabase();
